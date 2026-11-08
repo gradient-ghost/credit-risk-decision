@@ -340,8 +340,17 @@ class CreditFeaturePipeline(BaseEstimator, TransformerMixin):
         num_dict["revol_util_clean"] = parse_revol_util(df["revol_util"])
 
         # 9. Cleaned term & emp_length
-        num_dict["term_months"] = parse_term(df["term"])
-        num_dict["emp_length_years"] = parse_emp_length(df["emp_length"])
+        if "term_months" in df.columns and df["term_months"].notna().any():
+            term_col = pd.to_numeric(df["term_months"], errors="coerce")
+            num_dict["term_months"] = term_col.fillna(parse_term(df["term"]))
+        else:
+            num_dict["term_months"] = parse_term(df["term"])
+
+        if "emp_length_years" in df.columns and df["emp_length_years"].notna().any():
+            emp_col = pd.to_numeric(df["emp_length_years"], errors="coerce")
+            num_dict["emp_length_years"] = emp_col.fillna(parse_emp_length(df["emp_length"]))
+        else:
+            num_dict["emp_length_years"] = parse_emp_length(df["emp_length"])
 
         # 10. Derogatory recency fields (sentinel 999.0 + binary indicator flags)
         derog_pairs = [
@@ -481,22 +490,22 @@ class CreditFeaturePipeline(BaseEstimator, TransformerMixin):
         num_df, cat_df = self._engineer_features(df)
 
         # Align numeric columns with learned feature set and impute NaNs
-        aligned_num = pd.DataFrame(index=df.index)
-        for col in self.numeric_cols_:
-            if col in num_df.columns:
-                series = num_df[col]
-            else:
-                series = pd.Series(np.nan, index=df.index)
-
+        n_rows = len(df)
+        num_matrix = np.empty((n_rows, len(self.numeric_cols_)), dtype=np.float32)
+        for j, col in enumerate(self.numeric_cols_):
             median_val = self.numeric_medians_.get(col, 0.0)
-            aligned_num[col] = series.fillna(median_val).astype(np.float32)
+            if col in num_df.columns:
+                vals = pd.to_numeric(num_df[col], errors="coerce").to_numpy(dtype=np.float32)
+                np.nan_to_num(vals, copy=False, nan=median_val)
+                num_matrix[:, j] = vals
+            else:
+                num_matrix[:, j] = median_val
 
         # One-hot encode categoricals
         cat_cols = list(CATEGORICAL_SPEC.keys())
         ohe_matrix = self.ohe_.transform(cat_df[cat_cols])
 
         # Combine into contiguous 2D array
-        num_matrix = aligned_num.to_numpy(dtype=np.float32)
         combined = np.hstack([num_matrix, ohe_matrix]).astype(np.float32)
 
         # Ensure zero NaNs or Infs
@@ -517,6 +526,10 @@ class CreditFeaturePipeline(BaseEstimator, TransformerMixin):
     ) -> pd.DataFrame:
         """Convenience method returning a DataFrame with named feature columns."""
         return self.transform(X, return_df=True)
+
+    def transform_single_applicant(self, applicant: Dict[str, Any]) -> np.ndarray:
+        """Transform a single applicant dictionary into a 2D numpy array of shape (1, n_features)."""
+        return self.transform([applicant], return_df=False)
 
     def get_feature_names_out(self, input_features=None) -> np.ndarray:
         """Return array of output feature names for scikit-learn compliance."""

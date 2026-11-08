@@ -217,12 +217,34 @@ and dispute inaccurate information.
 
 ---
 
+## ⚡ High-Throughput REST API Scoring Engine (Phase 6)
+
+In production banking, credit scoring must be decoupled from the batch training pipeline and respond in real-time under strict latency service-level agreements (SLAs).
+
+### Architecture & Lifespan Preloading (`api/main.py`)
+* **Lifespan Context Management:** The application preloads `feature_pipeline.joblib`, `champion_model.joblib`, `feature_names.json`, and `policy_thresholds.json` into memory once during startup.
+* **Warmup Pass:** On initialization, the engine executes a synthetic warmup pass through the XGBoost tree booster, ensuring zero JIT cold-start latency for the first live user request.
+* **Pydantic V2 Contract (`api/schemas.py`):** Enforces strict field bounds (`loan_amnt > 0`, `annual_inc > 0`, `fico_score` in $[300, 850]$, `dti >= 0`, `term_months` restricted to 36 or 60). Rejects malformed requests with `HTTP 422 Unprocessable Entity` before pipeline invocation.
+
+### Production Endpoints
+1. `GET /health`: Liveness and readiness probe reporting model readiness flags, memory footprint, and server uptime.
+2. `GET /policy`: Returns operational threshold configuration ($\tau_{\text{low}}^* = 0.25, \tau_{\text{high}}^* = 0.35$) and validation metrics.
+3. `POST /predict`: Real-time applicant scoring returning calibrated default probability, Expected Loss ($), decision tier (`AUTO_APPROVE`, `MANUAL_REVIEW`, `AUTO_REJECT`), and statutory Adverse Action reasons.
+
+### Latency Benchmarking (10 Consecutive Invocations)
+* **Mean Inference Latency:** **37.48 ms** (SLA Target: $< 50.0\text{ ms}$ — **PASSED**)
+* **p95 Latency:** **40.97 ms**
+* **Max Latency:** **40.97 ms** (SLA Target: $< 100.0\text{ ms}$ — **PASSED**)
+
+---
+
 ## 🧪 Automated Testing & Verification
 
-The codebase enforces strict test-driven quality assurance via `pytest` (**46 / 46 tests passing in 4.35s**):
+The codebase enforces strict test-driven quality assurance via `pytest` (**53 / 53 tests passing in 5.08s**):
 ```bash
 .venv/bin/pytest tests/ -v
 ```
+* **API Endpoints & SLAs (`tests/test_api.py`):** Asserts health/readiness status, policy rules, prime borrower auto-approval, subprime auto-rejection with 3 FCRA adverse action reasons, manual review routing, HTTP 422 input validations, and sub-100ms latency SLA (7 tests).
 * **Leakage Gate (`tests/test_leakage.py`):** Asserts zero blacklisted post-origination features exist in any processed dataset (8 tests).
 * **Temporal Cutoffs (`tests/test_splits.py`):** Asserts strict chronological year boundaries and realistic default rate bounds ($10\% - 30\%$) (8 tests).
 * **Inference Symmetry (`tests/test_features.py`):** Asserts single raw applicant dictionary passes through `feature_pipeline.joblib` producing a finite 2D array of exactly `(1, 151)` features with 0 NaNs and 0 Infs (7 tests).
@@ -261,8 +283,11 @@ credit-risk-decision/
 │   ├── explainability/            # TreeSHAP explainer & statutory Adverse Action generator
 │   └── monitoring/                # [Phase 7] PSI feature drift & score stability engine
 ├── api/                           # [Phase 6] FastAPI scoring service
+│   ├── main.py                    # Async lifespan application, /health, /policy, /predict
+│   └── schemas.py                 # Pydantic V2 input & response data contracts
 ├── dashboard/                     # [Phase 7] 5-Tab Streamlit underwriting dashboard
 ├── tests/
+│   ├── test_api.py                # REST API, SLA latency & Pydantic validation assertions
 │   ├── test_env.py                # Environment & GPU detection assertions
 │   ├── test_leakage.py            # Zero post-origination leakage assertions
 │   ├── test_splits.py             # Temporal boundary assertions
