@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/raw/*.csv
+data/raw/*.csv.gz
+data/processed/*.csv
+data/processed/*.parquet
+models/*.joblib
+models/*.json
+models/*.pkl
+!data/sample/
+
+# Meta tracking docs
+ADR_log.md
+progress.md

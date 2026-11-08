@@ -1,0 +1,86 @@
+# Model and Experiment Configuration
+# Through-The-Cycle (TTC) Modeling & Walk-Forward Validation
+
+project:
+  name: "credit-risk-decision-system"
+  seed: 42
+
+# Data Splitting Strategy (ADR 3.2)
+splits:
+  date_column: "issue_d"
+  train:
+    start_year: 2013
+    end_year: 2015
+    description: "Through-The-Cycle (TTC) training vintage"
+  validation:
+    year: 2016
+    description: "Validation set for early stopping, calibration, and policy threshold search"
+  test:
+    start_year: 2017
+    end_year: 2018
+    description: "Out-of-time walk-forward test set (touched once for final evaluation)"
+
+# Cost Assumptions & Metrics (ADR 2.2)
+cost_assumptions:
+  lgd: 1.0  # Loss Given Default (unsecured consumer debt assumption)
+  exposure_col: "loan_amnt"
+  cost_of_review: 50.0  # Underwriter manual review cost in USD per application
+
+# Decision Policy Thresholds (ADR 1.4 & 4.3)
+policy:
+  default_thresholds:
+    tau_low: 0.10    # PD < tau_low -> Auto-Approve
+    tau_high: 0.25   # PD > tau_high -> Auto-Reject; between -> Manual Review
+  optimization:
+    metric: "expected_loss"
+    target_approval_rate_min: 0.70
+
+# Model Hyperparameters (ADR 5.2)
+models:
+  logistic_regression:
+    penalty: "l2"
+    C: 0.1
+    solver: "lbfgs"
+    max_iter: 1000
+    class_weight: "balanced"
+    random_state: 42
+
+  random_forest:
+    n_estimators: 200
+    max_depth: 12
+    min_samples_split: 50
+    min_samples_leaf: 25
+    class_weight: "balanced"
+    n_jobs: -1
+    random_state: 42
+
+  xgboost:
+    n_estimators: 400
+    learning_rate: 0.05
+    max_depth: 6
+    subsample: 0.8
+    colsample_bytree: 0.8
+    scale_pos_weight: 4.0
+    tree_method: "hist"
+    device: "cuda"
+    eval_metric: "auc"
+    early_stopping_rounds: 30
+    random_state: 42
+
+  lightgbm:
+    n_estimators: 400
+    learning_rate: 0.05
+    num_leaves: 31
+    max_depth: -1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    class_weight: "balanced"
+    n_jobs: -1
+    random_state: 42
+
+# Calibration Strategy (ADR 4.2)
+calibration:
+  methods:
+    - "sigmoid"   # Platt scaling
+    - "isotonic"  # Isotonic regression
+  n_bins: 10
