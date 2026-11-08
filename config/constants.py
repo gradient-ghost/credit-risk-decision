@@ -71,6 +71,14 @@ POST_ORIGINATION_COLS = [
     "hardship_last_payment_amount",
 ]
 
+# Non-predictive and high-cardinality identifier columns
+IDENTIFIER_COLS = [
+    "id",
+    "member_id",
+    "url",
+    "desc",
+]
+
 # Business & Cost Accounting Constants (ADR 2.2)
 EXPOSURE_COL = "loan_amnt"
 LGD_DEFAULT = 1.0  # Loss Given Default (100% loss upon default for unsecured consumer loans)

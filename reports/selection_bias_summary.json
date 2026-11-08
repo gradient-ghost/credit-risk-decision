@@ -1,0 +1,83 @@
+{
+  "sample_size": 100000,
+  "summary_statistics": {
+    "fico_vs_risk_score": {
+      "accepted_fico": {
+        "name": "Accepted FICO",
+        "count": 100000,
+        "mean": 695.56,
+        "std": 29.8,
+        "min": 662.0,
+        "p25": 672.0,
+        "median": 687.0,
+        "p75": 712.0,
+        "max": 847.5,
+        "iqr": 40.0
+      },
+      "rejected_risk_score": {
+        "name": "Rejected Risk_Score",
+        "count": 90682,
+        "mean": 579.41,
+        "std": 170.59,
+        "min": 0.0,
+        "p25": 524.0,
+        "median": 627.0,
+        "p75": 683.0,
+        "max": 832.0,
+        "iqr": 159.0
+      }
+    },
+    "debt_to_income": {
+      "accepted_dti": {
+        "name": "Accepted DTI",
+        "count": 100000,
+        "mean": 18.31,
+        "std": 8.29,
+        "min": 0.0,
+        "p25": 12.06,
+        "median": 17.8,
+        "p75": 24.18,
+        "max": 83.4,
+        "iqr": 12.12
+      },
+      "rejected_dti": {
+        "name": "Rejected DTI",
+        "count": 100000,
+        "mean": 3447.65,
+        "std": 36103.3,
+        "min": -1.0,
+        "p25": 2.56,
+        "median": 15.47,
+        "p75": 30.83,
+        "max": 3967200.0,
+        "iqr": 28.27
+      }
+    },
+    "loan_amount": {
+      "accepted_loan_amnt": {
+        "name": "Accepted Loan Amnt",
+        "count": 100000,
+        "mean": 14638.98,
+        "std": 8406.47,
+        "min": 1000.0,
+        "p25": 8000.0,
+        "median": 12800.0,
+        "p75": 20000.0,
+        "max": 35000.0,
+        "iqr": 12000.0
+      },
+      "rejected_amount_requested": {
+        "name": "Rejected Amount Requested",
+        "count": 100000,
+        "mean": 10109.96,
+        "std": 7634.49,
+        "min": 500.0,
+        "p25": 4000.0,
+        "median": 8000.0,
+        "p75": 15000.0,
+        "max": 40000.0,
+        "iqr": 11000.0
+      }
+    }
+  }
+}
