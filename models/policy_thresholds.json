@@ -1,0 +1,101 @@
+{
+  "policy_name": "3-Band Credit Risk Decision Policy",
+  "tau_low": 0.25,
+  "tau_high": 0.35,
+  "lgd_assumption": 1.0,
+  "min_approval_rate_constraint": 0.6,
+  "max_review_rate_constraint": 0.2,
+  "selection_tier": "Auto-Approval Constraint (auto_rate >= 0.60)",
+  "validation_eval": {
+    "tau_low": 0.25,
+    "tau_high": 0.35,
+    "lgd": 1.0,
+    "total_applicants": 293105,
+    "total_exposure": 4240361600.0,
+    "baseline": {
+      "expected_loss": 1058548017.6213813,
+      "realized_loss": 1051345600.0,
+      "default_rate_pct": 23.28585319254192,
+      "expected_loss_rate_pct": 24.963626159179004
+    },
+    "auto_approve": {
+      "count": 180246,
+      "pct_portfolio": 61.495368553931186,
+      "total_exposure": 2396282450.0,
+      "realized_default_rate": 14.04802325710418,
+      "total_expected_loss": 328222479.02412236,
+      "realized_losses": 334870325.0,
+      "expected_loss_rate_pct": 13.697153231002563
+    },
+    "manual_review": {
+      "count": 51701,
+      "pct_portfolio": 17.639071322563588,
+      "total_exposure": 762495275.0,
+      "realized_default_rate": 29.585501247558078,
+      "total_expected_loss": 226857488.66805133,
+      "realized_losses": 223821075.0,
+      "expected_loss_rate_pct": 29.751986157298
+    },
+    "auto_reject": {
+      "count": 61158,
+      "pct_portfolio": 20.86556012350523,
+      "total_exposure": 1081583875.0,
+      "realized_default_rate": 45.186238922136106,
+      "expected_losses_saved": 503468049.92920756,
+      "realized_losses_saved": 492654200.0,
+      "expected_loss_rate_pct": 46.54914533828526
+    },
+    "headline": {
+      "expected_loss_reduction": 503468049.92920756,
+      "pct_expected_loss_reduction": 47.562136204319714,
+      "realized_loss_reduction": 492654200.0,
+      "pct_realized_loss_reduction": 46.8593961871339
+    }
+  },
+  "test_eval": {
+    "tau_low": 0.25,
+    "tau_high": 0.35,
+    "lgd": 1.0,
+    "total_applicants": 225639,
+    "total_exposure": 3259579400.0,
+    "baseline": {
+      "expected_loss": 825487235.99613,
+      "realized_loss": 770237650.0,
+      "default_rate_pct": 21.291975234777677,
+      "expected_loss_rate_pct": 25.3249617418778
+    },
+    "auto_approve": {
+      "count": 138709,
+      "pct_portfolio": 61.47385868577684,
+      "total_exposure": 1775283425.0,
+      "realized_default_rate": 13.04529626772596,
+      "total_expected_loss": 245389354.9719311,
+      "realized_losses": 245554575.0,
+      "expected_loss_rate_pct": 13.822545263268657
+    },
+    "manual_review": {
+      "count": 40620,
+      "pct_portfolio": 18.00220706526797,
+      "total_exposure": 630641125.0,
+      "realized_default_rate": 27.68833087149188,
+      "total_expected_loss": 187931573.65063328,
+      "realized_losses": 176146900.0,
+      "expected_loss_rate_pct": 29.80008220216106
+    },
+    "auto_reject": {
+      "count": 46310,
+      "pct_portfolio": 20.52393424895519,
+      "total_exposure": 853654850.0,
+      "realized_default_rate": 40.38220686676744,
+      "expected_losses_saved": 392166307.3735657,
+      "realized_losses_saved": 348536175.0,
+      "expected_loss_rate_pct": 45.93968011469339
+    },
+    "headline": {
+      "expected_loss_reduction": 392166307.3735657,
+      "pct_expected_loss_reduction": 47.507252719702166,
+      "realized_loss_reduction": 348536175.0,
+      "pct_realized_loss_reduction": 45.25047237044307
+    }
+  }
+}

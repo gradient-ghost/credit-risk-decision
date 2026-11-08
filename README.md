@@ -145,16 +145,90 @@ We evaluated 3 baselines and 3 challenger architectures across 733,000 historica
 
 ---
 
+## 🎯 Decision Policy Engine & Expected Loss Optimization (Phase 5)
+
+A credit model that outputs probabilities does not make business decisions on its own. The Policy Engine (`src/policy/decision_engine.py`) translates calibrated probabilities into financial balance-sheet outcomes:
+
+$$\text{Expected Loss (EL)} = P(\text{Default}) \times \text{Exposure} \times \text{LGD} \quad (\text{where LGD} = 1.0)$$
+
+### 2D Grid Search & Cutoff Optimization
+We conducted a 2D parameter search over $\tau_{\text{low}} \in [0.05, 0.25]$ and $\tau_{\text{high}} \in [0.15, 0.45]$ on the 2016 Out-of-Time Validation Set ($N = 293,105$), subject to business constraints:
+* **Auto-Approval Floor:** $\ge 60\%$ automated approval volume to maintain business velocity.
+* **Underwriter Bandwidth:** $\le 20\%$ manual review capacity.
+
+**Optimal Policy Cutoffs Identified:**
+$$\tau_{\text{low}}^* = 0.25 \quad \big| \quad \tau_{\text{high}}^* = 0.35$$
+
+### Master Policy Scorecard (Out-of-Time Test Set: 2017–2018, $N = 225,639$)
+| Decision Tier | Threshold Condition | Loan Count | Portfolio % | Exposure ($) | Realized Default Rate | Expected Loss ($) | Expected Losses Saved ($) | Realized Losses Saved ($) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Approve-Everyone Baseline** | None | 225,639 | 100.00% | $3,259,579,400 | 21.29% | $825,487,236 | $0 | $0 |
+| **Tier 1: Auto-Approve** | $p < 0.25$ | 138,709 | **61.47%** | $1,775,283,425 | **13.05%** | $245,389,355 | — | — |
+| **Tier 2: Manual Review** | $0.25 \le p \le 0.35$ | 40,620 | **18.00%** | $630,641,125 | 27.69% | $187,931,574 | — | — |
+| **Tier 3: Auto-Reject** | $p > 0.35$ | 46,310 | **20.52%** | $853,654,850 | **40.38%** | — | **$392,166,307** | **$348,536,175** |
+| **🌟 Headline Executive Metric** | **$\tau^* = (0.25, 0.35)$** | — | — | — | — | — | **$392,166,307 (47.51%)** | **$348,536,175 (45.25%)** |
+
+### Policy Engineering Insights:
+1. **The Asymmetric Loss Frontier ($392.2M Saved):** Auto-rejecting the top 20.52% riskiest loans ($p > 0.35$) eliminates **$392.17 Million** in Expected Loss (**47.51% reduction**) and directly avoids **$348.54 Million** in realized charge-offs. The auto-rejected cohort exhibited a **40.38% realized default rate** (nearly double the portfolio average).
+2. **Human-in-the-Loop Gray Zone (18.0% Review):** Rather than blindly rejecting borderline applicants, routing 18.00% to underwriters preserves **$630.6M** in viable loan volume for secondary document verification.
+3. **Pristine Auto-Approve Tier:** Auto-approved borrowers enjoy an ultra-low **13.05% default rate** (down from 21.29%), creating an exceptionally stable prime credit asset class.
+
+---
+
+## 🔍 Model Explainability & Statutory Adverse Action Notices (Phase 5)
+
+Consumer lending is strictly regulated under the **Equal Credit Opportunity Act (ECOA / Regulation B)** and the **Fair Credit Reporting Act (FCRA)**. When a loan is rejected or modified, lenders are legally required to provide the applicant with the principal reasons for adverse action.
+
+Our explainer engine (`src/explainability/shap_explainer.py`) implements `shap.TreeExplainer` on the champion booster to extract local Shapley values ($\phi_i$) and maps them to transparent, non-technical disclosures.
+
+### Top 5 Global Credit Risk Drivers (Mean |SHAP| on 1,000 Test Sample):
+1. **`int_rate` (Mean |SHAP| = 0.4534):** *High interest rate risk tier on requested credit product*
+2. **`term_months` (Mean |SHAP| = 0.2743):** *Extended loan repayment term (60 months vs 36 months)*
+3. **`acc_open_past_24mths` (Mean |SHAP| = 0.1188):** *Too many credit accounts opened in the past 24 months (credit-seeking velocity)*
+4. **`dti` (Mean |SHAP| = 0.1178):** *High aggregate debt-to-income ratio*
+5. **`payment_to_income_ratio` (Mean |SHAP| = 0.0951):** *High monthly debt payment relative to monthly income (budget suffocation)*
+
+*A 300 DPI publication-quality summary beeswarm plot is generated at `reports/figures/shap_summary_beeswarm.png`.*
+
+### Example Statutory Adverse Action Notice Generated:
+```text
+================================================================================
+                    STATEMENT OF CREDIT ADVERSE ACTION
+================================================================================
+Date: 2026-11-09
+Applicant Reference: APP-41279
+
+DECISION: Credit Application Declined (Auto-Reject, Risk Tier 3)
+Model Evaluated Probability of Default: 44.82%
+Policy Maximum Threshold: 35.00%
+
+In accordance with the Equal Credit Opportunity Act (ECOA) and the Fair Credit
+Reporting Act (FCRA), our credit decision was based on the following principal
+factors:
+
+  1. High interest rate risk tier on requested credit product
+  2. High aggregate debt-to-income ratio (DTI exceeds prudent policy limits)
+  3. Too many credit accounts opened in the past 24 months
+
+You have the right under the FCRA to receive a free copy of your credit report
+and dispute inaccurate information.
+================================================================================
+```
+
+---
+
 ## 🧪 Automated Testing & Verification
 
-The codebase enforces strict test-driven quality assurance via `pytest` (**34 / 34 tests passing in 4.45s**):
+The codebase enforces strict test-driven quality assurance via `pytest` (**46 / 46 tests passing in 4.35s**):
 ```bash
 .venv/bin/pytest tests/ -v
 ```
-* **Leakage Gate (`tests/test_leakage.py`):** Asserts zero blacklisted post-origination features exist in any processed dataset.
-* **Temporal Cutoffs (`tests/test_splits.py`):** Asserts strict chronological year boundaries and realistic default rate bounds ($10\% - 30\%$).
-* **Inference Symmetry (`tests/test_features.py`):** Asserts that passing a single raw applicant dictionary through `feature_pipeline.joblib` produces a finite 2D array of exactly `(1, 151)` features with 0 NaNs and 0 Infs.
-* **Model Validation (`tests/test_models.py`):** Asserts that the champion model exists, produces valid probability vectors $[0, 1]$, achieves Gini $> 0.25$, meets Brier score targets $< 0.20$, and retains $> 95\%$ power in the Option Z ablation test.
+* **Leakage Gate (`tests/test_leakage.py`):** Asserts zero blacklisted post-origination features exist in any processed dataset (8 tests).
+* **Temporal Cutoffs (`tests/test_splits.py`):** Asserts strict chronological year boundaries and realistic default rate bounds ($10\% - 30\%$) (8 tests).
+* **Inference Symmetry (`tests/test_features.py`):** Asserts single raw applicant dictionary passes through `feature_pipeline.joblib` producing a finite 2D array of exactly `(1, 151)` features with 0 NaNs and 0 Infs (7 tests).
+* **Model Validation (`tests/test_models.py`):** Asserts champion model exists, outputs bounded $[0, 1]$ probabilities, achieves Gini $> 0.25$, meets Brier $< 0.20$, and retains $> 95\%$ power in Option Z ablation (9 tests).
+* **Policy Verification (`tests/test_policy.py`):** Asserts `models/policy_thresholds.json` validity ($0 < \tau_{\text{low}} < \tau_{\text{high}} < 1$), strict monotonic band assignment, boundary conditions, expected loss math, and evaluation metric accounting (6 tests).
+* **Explainability Verification (`tests/test_explainability.py`):** Asserts existence of SHAP beeswarm plot and precomputed background cache, verifies exactly 3 non-empty adverse action reason strings, tests Series/NumPy input symmetry, and validates ECOA notice formatting (6 tests).
 
 ---
 
@@ -172,16 +246,19 @@ credit-risk-decision/
 │   └── 01_leakage_and_selection_bias_audit.ipynb # Forensic distribution & leakage analysis
 ├── reports/
 │   ├── selection_bias_summary.json # Quantitative FICO & DTI comparison metrics
+│   ├── sample_shap_test.joblib    # Precomputed SHAP test cache for sub-second UI rendering
 │   └── figures/
-│       └── selection_bias_comparison.png         # Distribution visual proofs
+│       ├── selection_bias_comparison.png  # Selection bias distribution visual proofs
+│       ├── calibration_curves.png         # Platt vs Isotonic reliability diagrams
+│       └── shap_summary_beeswarm.png      # Global 15-feature TreeSHAP beeswarm plot
 ├── src/
 │   ├── data/
 │   │   └── make_dataset.py        # Chunked ingestion, zero-leakage gate, parquet partitioner
 │   ├── features/
 │   │   └── build_features.py      # Reusable CreditFeaturePipeline & ratio engine
-│   ├── models/                    # [Phase 4] Training, calibration & evaluation
-│   ├── policy/                    # [Phase 5] 3-band threshold optimization engine
-│   ├── explainability/            # [Phase 5] SHAP Adverse Action generator
+│   ├── models/                    # Model training, Platt calibration & runs logging
+│   ├── policy/                    # 3-band threshold optimization engine & EL calculator
+│   ├── explainability/            # TreeSHAP explainer & statutory Adverse Action generator
 │   └── monitoring/                # [Phase 7] PSI feature drift & score stability engine
 ├── api/                           # [Phase 6] FastAPI scoring service
 ├── dashboard/                     # [Phase 7] 5-Tab Streamlit underwriting dashboard
@@ -189,10 +266,15 @@ credit-risk-decision/
 │   ├── test_env.py                # Environment & GPU detection assertions
 │   ├── test_leakage.py            # Zero post-origination leakage assertions
 │   ├── test_splits.py             # Temporal boundary assertions
-│   └── test_features.py           # Feature matrix & inference symmetry assertions
+│   ├── test_features.py           # Feature matrix & inference symmetry assertions
+│   ├── test_models.py             # Model performance, calibration & Option Z assertions
+│   ├── test_policy.py             # Policy threshold validity & EL calculation assertions
+│   └── test_explainability.py     # SHAP artifacts & Adverse Action notice assertions
 ├── models/
 │   ├── feature_pipeline.joblib    # Serialized scikit-learn feature preprocessor
-│   └── feature_names.json         # 151 ordered feature names
+│   ├── feature_names.json         # 151 ordered feature names
+│   ├── policy_thresholds.json     # Optimal policy thresholds (tau_low=0.25, tau_high=0.35)
+│   └── runs_log.csv               # Complete benchmark audit log across 6 models
 ├── requirements.txt               # Pinned dependencies with CUDA support
 └── README.md                      # Architecture documentation & forensic case study
 ```

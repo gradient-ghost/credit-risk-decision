@@ -9,6 +9,8 @@ data/processed/*.parquet
 models/*.joblib
 models/*.json
 models/*.pkl
+!models/feature_names.json
+!models/policy_thresholds.json
 !data/sample/
 
 # Meta tracking docs
