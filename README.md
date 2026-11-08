@@ -1,0 +1,173 @@
+# Credit Risk Decision System
+> An end-to-end, Through-The-Cycle (TTC) machine learning decision system and interactive underwriting policy simulator built on 1.3 million historical loan records.
+
+---
+
+## 📌 Executive Summary & Core Objective
+
+In consumer lending, a machine learning model that merely outputs probabilities is incomplete. A functioning credit decision system requires:
+1. **Calibrated Default Probability ($PD$):** A mathematically grounded estimation of the likelihood a borrower will fail to repay.
+2. **Economic Risk Accounting ($\text{Expected Loss}$):** Translating abstract probabilities into actual dollar exposures:
+   $$\text{Expected Loss} = P(\text{Default}) \times \text{Exposure} \times \text{LGD}$$
+   *(where Exposure = Loan Amount, and Loss Given Default ($LGD$) is conservatively fixed at 100%).*
+3. **Automated 3-Band Decision Policy:** Converting predictions into operational underwriting tiers:
+   * **Tier 1 (Auto-Approve):** Risk $< \tau_{\text{low}}$ (instant origination).
+   * **Tier 2 (Manual Review):** $\tau_{\text{low}} \le \text{Risk} \le \tau_{\text{high}}$ (routed to human underwriters with Adverse Action reasons).
+   * **Tier 3 (Auto-Reject):** Risk $> \tau_{\text{high}}$ (statutory rejection with legally compliant explanations).
+4. **Macroeconomic Policy Dial:** Decoupling borrower fundamentals from economic weather, allowing risk managers to adjust threshold cutoffs as economic climates tighten without retraining the core model.
+
+---
+
+## 🏗️ System Architecture & Data Flow
+
+```
+[Lending Club Raw Dataset (2.26M Rows, 150 Columns)]
+                         │
+                         ▼
+             ┌───────────────────────┐
+             │ Zero-Leakage Gate     │  <── Drop 35 post-origination columns
+             │ & Target Formulation  │  <── Exclude active "Current" loans
+             └───────────┬───────────┘
+                         │
+             [Cleaned Concluded Cohort]
+             [1.29M Rows | 113 Features]
+                         │
+        ┌────────────────┴────────────────────────┐
+        │                                         │
+        ▼                                         ▼
+┌───────────────────────────────┐     ┌───────────────────────────────────┐
+│ Through-The-Cycle (TTC) Split │     │ Forensic Selection Bias Audit     │
+│ Train: 2013-15 (733k, 18.8%)  │     │ Accepted vs. Rejected (100k sample)│
+│ Val:   2016    (293k, 23.3%)  │     │ - Exposed FICO 660 invisible floor│
+│ Test:  2017-18 (225k, 21.3%)  │     │ - Uncovered Small Loan Paradox    │
+│ Stress:2007-11 ( 40k, 14.3%)  │     └───────────────────────────────────┘
+└───────────────┬───────────────┘
+                │
+                ▼
+┌───────────────────────────────┐
+│ Scale-Invariant Pipeline      │  <── Fitted strictly on Train
+│ - Payment-to-Income (PTI)     │  <── 151 numeric & one-hot features
+│ - Credit History Tenure       │  <── Sentinel 999.0 + Delinquency Flags
+│ - Account Breadth & Hunger    │  <── Exported: models/feature_pipeline.joblib
+└───────────────┬───────────────┘
+                │
+                ▼
+┌───────────────────────────────┐
+│ GPU Accelerated Modeling      │  <── Baselines: Approve-All, LogReg, Grade
+│ (XGBoost CUDA, LightGBM, RF)  │  <── Probability Calibration (Platt/Isotonic)
+└───────────────┬───────────────┘
+                │
+                ▼
+┌───────────────────────────────┐
+│ Policy Engine & Explainability│  <── Expected Loss threshold minimization
+│ (SHAP Adverse Action Drivers) │  <── TreeSHAP waterfall attributions
+└───────────────┬───────────────┘
+                │
+        ┌───────┴───────────────────────┐
+        ▼                               ▼
+┌───────────────────────────────┐     ┌───────────────────────────────────┐
+│ FastAPI Prediction Engine     │     │ Streamlit Policy Simulator        │
+│ (api/main.py: /predict)       │     │ (5 Tabs: Executive, Policy,       │
+│ - Strict Pydantic validation  │     │  Explorer, Segments, Drift)       │
+└───────────────────────────────┘     └───────────────────────────────────┘
+```
+
+---
+
+## 🔍 Forensic Data Insights & Business Intelligence
+
+Through exploratory data forensics and comparative distribution analysis, this system uncovered critical realities within the Lending Club lending history:
+
+### 1. The "Invisible Floor" at FICO 660 (Empirical Selection Bias)
+* **The Finding:** Comparing 100,000 accepted loans against 100,000 rejected applications revealed that accepted borrowers had a **strict minimum FICO of 662.0** (mean: 695.6, median: 687.0). Rejected applicants averaged a risk score of 579.4 (median: 627.0, 25th percentile: 524.0).
+* **The Business Meaning:** Lending Club enforced an unwritten hard-stop rule: applicants below FICO 660 were rejected on the spot.
+* **The Engineering Consequence:** Proves our training data inherently suffers from **survivorship/selection bias**; our model learns patterns of creditworthy borrowers, requiring policy rule-based gates for subprime applications.
+
+### 2. The "2016 Default Spike" (+4.48% Jump) (Macro & Concept Drift)
+* **The Finding:** While default rates held steady at **18.81%** during 2013–2015, they surged to **23.29%** in 2016 and stayed elevated at **21.29%** in 2017–2018.
+* **The Business Meaning:** Lending Club expanded origination volume ahead of public scrutiny, loosening underwriting standards just as the Federal Reserve began its interest rate hiking cycle.
+* **The Engineering Consequence:** A standard random train/test split would shuffle 2016 into training and mask this degradation. Our **Walk-Forward Out-Of-Time (OOT) Split** exposes this shift, forcing downstream probability calibration to adjust for real-world macroeconomic stress.
+
+### 3. The "Small Loan Paradox" (Distress Borrowing)
+* **The Finding:** Rejected applicants requested *smaller* loans (mean: $10,110, median: $8,000) than accepted borrowers (mean: $14,639, median: $12,800).
+* **The Business Meaning:** Distressed subprime applicants sought small, emergency cash loans ($3k–$8k) to bridge urgent liquidity needs, but were disqualified by high DTI and low credit scores. Approved prime borrowers applied for larger, strategic debt consolidation loans ($15k–$35k).
+
+---
+
+## 🛡️ Zero-Leakage Data Partitioning
+
+| Partition | Time Vintage | Clean Rows | Default Rate | Role in Engine |
+| :--- | :---: | :---: | :---: | :--- |
+| **`train.parquet`** | **2013–2015** | **733,453** | **18.81%** | Core Through-The-Cycle Training |
+| **`val.parquet`** | **2016** | **293,105** | **23.29%** | Probability Calibration & Threshold Tuning |
+| **`test.parquet`** | **2017–2018** | **225,639** | **21.29%** | Untouched Walk-Forward Final Exam |
+| **`stress_test.parquet`** | **2007–2011** | **39,786** | **14.25%** | 2008 Financial Crisis Stress Test |
+
+* **Zero Post-Origination Leakage:** 35 future columns (e.g. `recoveries`, `collection_recovery_fee`, `last_pymnt_amnt`, `out_prncp`) were permanently stripped.
+* **No Right-Censoring Noise:** Active `"Current"` loans were filtered out, ensuring models only train on matured, verified credit outcomes.
+
+---
+
+## ⚙️ Scale-Invariant Feature Engineering Pipeline
+
+Raw dollar numbers (e.g. $50,000 income) change meaning over time due to inflation. Our feature engineering engine (`src/features/build_features.py`) constructs **151 scale-invariant structural features**:
+
+1. **Payment-to-Income Ratio (PTI):** $\text{Installment} / (\text{Annual Income} / 12)$ — measures monthly budget suffocation.
+2. **Credit History Tenure:** Time in decimal years between `earliest_cr_line` and loan `issue_d` — captures multi-decade borrower track record.
+3. **Account Breadth:** $\text{Open Accounts} / \text{Total Accounts}$ — isolates credit capacity from excessive debt expansion.
+4. **Credit Hunger Velocity:** `inq_last_6mths` — acts as a leading indicator of emergency liquidity distress.
+5. **Clean Record Sentinel Imputation:** Over 50% of borrowers had missing delinquency records because they had never missed a payment. Missing values are filled with sentinel $999.0$ paired with a binary `has_delinq_history = 0` indicator, preventing the false penalization of prime borrowers.
+6. **Zero Train-Serving Skew:** Entire transformation is packaged in `models/feature_pipeline.joblib` (fitted strictly on `train.parquet`), guaranteeing that the Phase 6 FastAPI inference engine runs the exact same mathematical transformations.
+
+---
+
+## 🧪 Automated Testing & Verification
+
+The codebase enforces strict test-driven quality assurance via `pytest`:
+```bash
+.venv/bin/pytest tests/ -v
+```
+* **Leakage Gate (`tests/test_leakage.py`):** Asserts zero blacklisted post-origination features exist in any processed dataset.
+* **Temporal Cutoffs (`tests/test_splits.py`):** Asserts strict chronological year boundaries and realistic default rate bounds ($10\% - 30\%$).
+* **Inference Symmetry (`tests/test_features.py`):** Asserts that passing a single raw applicant dictionary through `feature_pipeline.joblib` produces a finite 2D array of exactly `(1, 151)` features with 0 NaNs and 0 Infs.
+
+---
+
+## 📂 Repository Structure
+
+```
+credit-risk-decision/
+├── config/
+│   ├── constants.py               # Global seed (42), 35-column blacklist, path constants
+│   └── model_config.yaml          # Hyperparameters, split cutoffs, GPU acceleration configs
+├── data/
+│   ├── raw/                       # Immutable source data (accepted & rejected .csv.gz)
+│   └── processed/                 # Compressed Parquet partitions (train, val, test, stress)
+├── notebooks/
+│   └── 01_leakage_and_selection_bias_audit.ipynb # Forensic distribution & leakage analysis
+├── reports/
+│   ├── selection_bias_summary.json # Quantitative FICO & DTI comparison metrics
+│   └── figures/
+│       └── selection_bias_comparison.png         # Distribution visual proofs
+├── src/
+│   ├── data/
+│   │   └── make_dataset.py        # Chunked ingestion, zero-leakage gate, parquet partitioner
+│   ├── features/
+│   │   └── build_features.py      # Reusable CreditFeaturePipeline & ratio engine
+│   ├── models/                    # [Phase 4] Training, calibration & evaluation
+│   ├── policy/                    # [Phase 5] 3-band threshold optimization engine
+│   ├── explainability/            # [Phase 5] SHAP Adverse Action generator
+│   └── monitoring/                # [Phase 7] PSI feature drift & score stability engine
+├── api/                           # [Phase 6] FastAPI scoring service
+├── dashboard/                     # [Phase 7] 5-Tab Streamlit underwriting dashboard
+├── tests/
+│   ├── test_env.py                # Environment & GPU detection assertions
+│   ├── test_leakage.py            # Zero post-origination leakage assertions
+│   ├── test_splits.py             # Temporal boundary assertions
+│   └── test_features.py           # Feature matrix & inference symmetry assertions
+├── models/
+│   ├── feature_pipeline.joblib    # Serialized scikit-learn feature preprocessor
+│   └── feature_names.json         # 151 ordered feature names
+├── requirements.txt               # Pinned dependencies with CUDA support
+└── README.md                      # Architecture documentation & forensic case study
+```
