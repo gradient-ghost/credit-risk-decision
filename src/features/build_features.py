@@ -278,7 +278,7 @@ class CreditFeaturePipeline(BaseEstimator, TransformerMixin):
 
         return df
 
-    def _engineer_features(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def _engineer_features(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Compute scale-invariant ratios, indicators, and clean categoricals.
 
         Returns:

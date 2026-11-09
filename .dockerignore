@@ -1,0 +1,20 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.git
+.gitignore
+
+# Data Exclusions
+data/raw/
+data/processed/*.parquet
+!data/processed/test_summary.parquet
+data/processed/*.csv
+data/processed/*.npy
+
+# Test artifacts
+.coverage
+htmlcov/
+*.log
