@@ -238,12 +238,65 @@ In production banking, credit scoring must be decoupled from the batch training 
 
 ---
 
+## 🖥️ Interactive 5-Tab Streamlit Dashboard (Phase 7)
+
+An institutional-grade risk command center built with Streamlit and Plotly, supporting seamless **Dual Theme Switching** (`🌙 Dark` Midnight Slate & Obsidian vs `☀️ Light` Clean Banking White & Slate), designed for risk committees, senior credit officers, and front-line underwriters.
+
+### Launching the Dashboard
+```bash
+.venv/bin/streamlit run dashboard/app.py
+```
+
+### Dashboard Architecture & Feature Tabs
+
+```
+┌───────────────────────────────────────────────────────────────────────────────┐
+│              Credit Risk Underwriting & Policy Intelligence Dashboard         │
+│  [Tab 1: Executive]  [Tab 2: Policy Dial]  [Tab 3: Explorer]  [Tab 4: TTC] ... │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
+
+* **Dynamic Dark / Light Theme Engine:** One-click toggle in the top header instantly syncs typography, elevated card surfaces, status badges, and Plotly chart layouts between deep obsidian and crisp high-contrast daylight palettes.
+
+1. **Tab 1: Executive Overview & Model Tournament**
+   - **Headline Exposure KPIs:** $3.26B total exposure evaluated, $392.17M Expected Loss saved (-47.51%), 61.47% auto-approval rate.
+   - **Model Tournament Leaderboard:** Interactive scorecard comparing 6 model variants. Highlights Platt-Calibrated XGBoost (Brier score 0.1525, Gini 0.4229, KS 0.3066).
+   - **Interactive Calibration Curves:** Plotly reliability curves comparing Raw XGBoost, Calibrated XGBoost, LightGBM, and Logistic Regression against perfect diagonal.
+   - **Selection Bias Warning:** Prominent Basel III / OCC cautionary notice regarding the rejected applicant cohort (FICO < 660 invisible floor).
+
+2. **Tab 2: Dynamic Policy Simulator ("The Macro Weather Dial")**
+   - **Sub-10ms Reactivity:** Vectorized NumPy slicing over 225,639 loans in `data/processed/test_summary.parquet` executes in **2.91 ms to 7.38 ms**, delivering smooth 60 FPS slider reactivity.
+   - **Interactive Controls:** Real-time dual threshold sliders ($\tau_{\text{low}}, \tau_{\text{high}}$) and Loss Given Default ($LGD$) sensitivity dial ($10\% - 100\%$).
+   - **Macroeconomic Stress Presets:** One-click presets for *Aggressive Expansion*, *Baseline Fed Policy*, and *Severe Recession / Stress*.
+   - **Real-Time Financial Impact:** Live recalculation of per-tier loan volumes, default rates, and expected losses saved, visualized via dual-ring Plotly donut and waterfall charts.
+
+3. **Tab 3: Applicant Explorer & Statutory Adverse Action Engine**
+   - **Zero Runtime SHAP Latency:** Pre-bound to `reports/sample_shap_test.joblib` (1,000 applicants) loading in 20 ms with zero runtime TreeSHAP overhead.
+   - **Applicant Dossier:** Key financial factsheet (Loan amount, FICO score, DTI, Annual Income, Revolving Utilization, Stated Purpose).
+   - **Underwriting Badge & PD Gauge:** Dynamic decision badge (`AUTO_APPROVE`, `MANUAL_REVIEW`, `AUTO_REJECT`) and probability gauge.
+   - **Statutory Adverse Action Notice:** Formal ECOA/FCRA adverse action disclosure box with top 3 driving risk factors and consumer rights statement.
+   - **SHAP Waterfall Plot:** Interactive horizontal Plotly chart showing exact positive (red) and negative (green) feature contributions to log-odds.
+
+4. **Tab 4: Sub-Cohort & Walk-Forward Stability**
+   - **Through-The-Cycle (TTC) Scorecard:** Walk-forward out-of-time Gini evaluation comparing Validation 2016 (0.4229), Test 2017 (0.4233), and Test 2018 (0.4095)—proving minimal cycle degradation (1.38 pp).
+   - **Crisis Stress Test:** Evaluates performance against 2007–2011 Great Financial Crisis data (Gini 0.3846 under severe 22.3% baseline default rate).
+   - **Grade Monotonicity:** Verifies strictly monotonic default rate progression across Lending Club grades: Grade A (**6.33%**) $\rightarrow$ B (14.75%) $\rightarrow$ C (24.63%) $\rightarrow$ D (32.18%) $\rightarrow$ E (38.38%) $\rightarrow$ F (45.72%) $\rightarrow$ G (**50.09%**).
+   - **Sub-Cohort Breakdown:** Segmented risk analysis across loan purposes and home ownership statuses.
+
+5. **Tab 5: Model Health & Population Stability Index (PSI) Monitoring**
+   - **Basel III Model Risk Governance:** Formal MRG traffic-light alert protocol ($PSI < 0.10$ Stable, $0.10 \le PSI < 0.20$ Moderate Drift, $PSI \ge 0.20$ Significant Drift).
+   - **Top-10 Feature PSI Chart:** Compares 2016 validation baseline against 2017–2018 test monitoring distributions. Highlights moderate drift in `int_rate` ($PSI = 0.1461$, yellow) capturing the Fed rate hike cycle, with all other 9 features stable ($PSI < 0.05$, green).
+   - **Score Distribution Overlay:** Overlaid probability density curves comparing baseline vs. monitoring scores.
+
+---
+
 ## 🧪 Automated Testing & Verification
 
-The codebase enforces strict test-driven quality assurance via `pytest` (**53 / 53 tests passing in 5.08s**):
+The codebase enforces strict test-driven quality assurance via `pytest` (**63 / 63 tests passing in 4.90s**):
 ```bash
 .venv/bin/pytest tests/ -v
 ```
+* **Dashboard Suite (`tests/test_dashboard.py`):** Asserts clean component imports, cached data loaders, sub-10ms vectorized policy math accuracy, Population Stability Index (PSI) calculation bounds, card HTML generators, and Plotly figure constructors (10 tests).
 * **API Endpoints & SLAs (`tests/test_api.py`):** Asserts health/readiness status, policy rules, prime borrower auto-approval, subprime auto-rejection with 3 FCRA adverse action reasons, manual review routing, HTTP 422 input validations, and sub-100ms latency SLA (7 tests).
 * **Leakage Gate (`tests/test_leakage.py`):** Asserts zero blacklisted post-origination features exist in any processed dataset (8 tests).
 * **Temporal Cutoffs (`tests/test_splits.py`):** Asserts strict chronological year boundaries and realistic default rate bounds ($10\% - 30\%$) (8 tests).
@@ -258,6 +311,8 @@ The codebase enforces strict test-driven quality assurance via `pytest` (**53 / 
 
 ```
 credit-risk-decision/
+├── .streamlit/
+│   └── config.toml                # Institutional Obsidian dark theme configuration
 ├── config/
 │   ├── constants.py               # Global seed (42), 35-column blacklist, path constants
 │   └── model_config.yaml          # Hyperparameters, split cutoffs, GPU acceleration configs
@@ -281,13 +336,26 @@ credit-risk-decision/
 │   ├── models/                    # Model training, Platt calibration & runs logging
 │   ├── policy/                    # 3-band threshold optimization engine & EL calculator
 │   ├── explainability/            # TreeSHAP explainer & statutory Adverse Action generator
-│   └── monitoring/                # [Phase 7] PSI feature drift & score stability engine
-├── api/                           # [Phase 6] FastAPI scoring service
+│   └── monitoring/                # PSI feature drift & score stability engine
+├── api/                           # Decoupled FastAPI scoring microservice
 │   ├── main.py                    # Async lifespan application, /health, /policy, /predict
 │   └── schemas.py                 # Pydantic V2 input & response data contracts
-├── dashboard/                     # [Phase 7] 5-Tab Streamlit underwriting dashboard
+├── dashboard/                     # Interactive 5-Tab Streamlit underwriting dashboard
+│   ├── app.py                     # Main application entry point & wide layout orchestration
+│   ├── components/                # Cached loaders, visual cards & Plotly chart builders
+│   │   ├── cards.py               # Metric cards, status badges & FCRA disclosure boxes
+│   │   ├── data_loader.py         # Sub-10ms @st.cache loaders & PSI algorithms
+│   │   ├── plots.py               # Dark/Light Plotly reliability curves, donuts & waterfalls
+│   │   └── theme.py               # Dual Dark/Light theme tokens & clean HTML sanitizer
+│   └── tabs/                      # Tab modular renderers
+│       ├── tab1_executive.py      # Headline KPIs, Model Tournament & Calibration
+│       ├── tab2_policy_sim.py     # Real-time dual threshold sliders & macro presets
+│       ├── tab3_applicant.py      # Dossier lookup, FCRA notice & SHAP waterfall
+│       ├── tab4_stability.py      # Walk-forward OOT scorecard & grade monotonicity
+│       └── tab5_monitoring.py     # Basel III MRG & Population Stability Index (PSI)
 ├── tests/
 │   ├── test_api.py                # REST API, SLA latency & Pydantic validation assertions
+│   ├── test_dashboard.py          # Dashboard imports, loaders, simulation & PSI assertions
 │   ├── test_env.py                # Environment & GPU detection assertions
 │   ├── test_leakage.py            # Zero post-origination leakage assertions
 │   ├── test_splits.py             # Temporal boundary assertions

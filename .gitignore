@@ -6,6 +6,7 @@ data/raw/*.csv
 data/raw/*.csv.gz
 data/processed/*.csv
 data/processed/*.parquet
+data/processed/*.npy
 models/*.joblib
 models/*.json
 models/*.pkl

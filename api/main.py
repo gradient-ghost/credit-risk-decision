@@ -72,6 +72,13 @@ async def lifespan(app: FastAPI):
 
     logger.info("Loading calibrated champion model from %s...", champion_path)
     app.state.champion_model = joblib.load(champion_path)
+    try:
+        if hasattr(app.state.champion_model, "estimator") and hasattr(
+            app.state.champion_model.estimator, "estimator"
+        ):
+            app.state.champion_model.estimator.estimator.set_params(device="cpu")
+    except Exception:
+        pass
 
     logger.info("Loading feature names from %s...", features_path)
     with open(features_path, "r", encoding="utf-8") as f:
