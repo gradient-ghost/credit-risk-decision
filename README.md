@@ -184,6 +184,8 @@ Principal Reasons for Adverse Action:
 * **Endpoints:** `GET /health` (readiness probe), `GET /policy` (threshold config), `POST /predict` (scores, tiers, and top-3 FCRA reasons).
 
 ### 2. Interactive Risk Command Center (`dashboard/app.py`)
+> 📸 **Visual Tour:** For high-resolution visual walkthroughs and analytical breakdowns of each view in Light Mode, see the [Dashboard UI Guide](docs/assets/screenshots/README.md).
+
 * **Sub-10ms Reactivity:** Vectorized NumPy slicing over 225,639 loans runs in **2.91 ms to 7.38 ms**, powering dynamic 60 FPS slider simulations.
 * **5 Modular Tabs:**
   - **Tab 1: Executive Overview:** Headline exposure KPIs, model tournament leaderboard, and interactive reliability curves.
@@ -228,7 +230,7 @@ sudo docker compose logs -f
 | **6** | **Functional Adverse Action Notices** | Top-3 SHAP factors mapped to FCRA text | Verified by `tests/test_explainability.py` and live in Tab 3 | **PASS** |
 | **7** | **Interactive Policy Simulation** | Vectorized simulation latency $< 10\text{ ms}$ | **2.91 ms to 7.38 ms** execution across 225,639 loans; verified in Tab 2 | **PASS** |
 | **8** | **60-Second Recruiter Screen** | High-impact metrics & architecture above fold | Executive summary, box pipeline, quickstart, and scorecard above the fold | **PASS** |
-| **9** | **30-Minute Engineering Audit** | Justifications cross-referenced with ADR log | All 9 ADR groups documented, Option Z ablation proven, scripts reproducible | **PASS** |
+| **9** | **30-Minute Engineering Audit** | Justifications cross-referenced with ADR log | All 9 ADR groups documented in [ADR log](docs/ADR_log.md), Option Z ablation proven, scripts reproducible | **PASS** |
 | **10** | **Frictionless Containerized Demo** | Single command zero-auth deployment | `docker compose up` spins up healthy API (:8000) and Dashboard (:8501) | **PASS** |
 
 ---
@@ -264,6 +266,9 @@ credit-risk-decision/
 ├── config/
 │   ├── constants.py               # 35-column leakage blacklist, random seeds, paths
 │   └── model_config.yaml          # Hyperparameters, split cutoffs, GPU acceleration configs
+├── docs/
+│   ├── ADR_log.md                 # 9 Architecture Decision Record groups (Basel III, ECOA, Platt)
+│   └── assets/screenshots/        # 1440p Light Mode UI tour & analytical walkthrough
 ├── data/
 │   ├── raw/                       # Immutable source data (accepted & rejected .csv.gz)
 │   └── processed/                 # Compressed Parquet partitions (train, val, test, stress)

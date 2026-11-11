@@ -15,7 +15,6 @@ models/*.pkl
 !data/sample/
 
 # Meta tracking docs
-ADR_log.md
 progress.md
 FUTURE_IMPLEMENTATIONS.md
 FUTURE_IMPLEMENTATIONOS.md
