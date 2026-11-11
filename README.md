@@ -1,5 +1,5 @@
 # Credit Risk Decision System
-> An institutional-grade, Through-The-Cycle (TTC) credit decision engine and interactive underwriting policy simulator trained on 1.3 million historical loan records (Lending Club 2007–2018).
+> An institutional-grade credit risk decision engine with walk-forward out-of-time validation and crisis stress testing, trained on 1.3 million historical loan records (Lending Club 2007–2018).
 
 ---
 
@@ -9,7 +9,7 @@ Consumer credit models cannot stop at raw probabilities. A production credit sys
 
 | Metric | Measured Value | Benchmark / SLA | Business & Operational Impact |
 | :--- | :---: | :---: | :--- |
-| **Expected Loss Saved** | **$392.17M (-47.51%)** | vs. Approve-All ($825.5M) | Auto-rejects 20.5% riskiest loans ($p > 0.35$, 40.4% default rate) |
+| **Expected Loss Avoided** | **$392.17M (-47.51%)** | vs. Approve-All ($825.5M) | OOT backtest declines 20.5% riskiest loans ($p > 0.35$, 40.4% default rate) |
 | **Auto-Approval Rate** | **61.47%** | $\ge 60\%$ Policy Floor | Underwrites $1.78B prime credit at pristine **13.05%** default rate |
 | **Underwriter Capacity** | **18.00%** | $\le 20\%$ Capacity Ceiling | Routes $630.6M borderline loans to manual review, preserving volume |
 | **Champion Test Gini** | **0.4229** ($2\text{AUC}-1$) | vs. 0.2478 Regulated LogReg | **+70.6% relative discrimination lift** over linear scorecard ($p < 0.001$) |
@@ -35,8 +35,8 @@ docker compose up --build
 ## 🏗️ End-to-End System Architecture
 
 ```
-[1.3M Raw Loans] ──▶ [Zero-Leakage Gate] ──▶ [Scale-Invariant Ratios] ──▶ [Platt-XGBoost]
- (2007-2018 LC)        (Drop 35 Future Cols)     (151 PTI, Tenure, Sentinel)   (Gini 0.423, Brier 0.153)
+[2.26M Raw Loans] ──▶ [Terminal Status Gate] ──▶ [Scale-Invariant Ratios] ──▶ [Platt-XGBoost]
+ (2007-2018 LC)        (Drop 35 Cols / 1.29M Clean) (151 PTI, Tenure, Sentinel)   (Gini 0.423, Brier 0.153)
                                                                                        │
        ┌───────────────────────────────────────────────────────────────────────────────┘
        ▼
@@ -48,21 +48,21 @@ docker compose up --build
 
 ## 🔍 Forensic Data Audit & Selection Bias
 
-Exploratory distribution analysis across 2.26 million loan records uncovered critical structural characteristics:
+Exploratory distribution analysis across 2.26 million raw accepted loan records and 27.6 million rejected applications uncovered critical structural characteristics:
 
 ```
-Accepted Applications (100k sample)         Rejected Applications (100k sample)
+Accepted Applications (100k sample)         Rejected Applications (100k sample from 27.6M)
 Mean FICO: 695.6 | Min FICO: 662.0          Mean Risk Score: 579.4 | Median: 627.0
 [============== FICO >= 662 ===============] | [====== FICO 300 - 661 ======] (100% Rejected)
 ```
 
 1. **The FICO 660 Invisible Floor (Selection Bias):** Lending Club enforced an unwritten hard stop: zero accepted loans existed below FICO 662. Proves the training population represents *already-screened* applicants (survivorship bias), requiring explicit policy guardrails for subprime cohorts.
-2. **The 2016 Default Spike (+4.48% Shift):** Default rates surged from **18.81%** (2013–15) to **23.29%** in 2016 as origination volumes expanded ahead of Fed rate hikes. A random train/test split would blend these regimes; our **Walk-Forward Out-Of-Time (OOT) Split** isolates this shift.
+2. **The 2016 Default Spike (+4.48 pp Shift / +23.8% Relative Surge):** Default rates surged from **18.81%** (2013–15) to **23.29%** in 2016 as origination volumes expanded ahead of Fed rate hikes. A random train/test split would blend these regimes; our **Walk-Forward Out-Of-Time (OOT) Split** isolates this shift.
 3. **The Small Loan Paradox:** Rejected applicants requested smaller loans (mean: $10,110) than accepted borrowers ($14,639). Subprime applicants sought emergency liquidity ($3k–$8k), whereas prime borrowers applied for structured debt consolidation ($15k–$35k).
 
 ### Zero-Leakage Temporal Partitioning
 * **35 Future Columns Stripped:** Permanently removed post-origination columns (`recoveries`, `collection_recovery_fee`, `last_pymnt_amnt`, `out_prncp`, etc.).
-* **Active Loans Excluded:** Removed active `"Current"` loans to avoid right-censoring noise.
+* **Active Loans Excluded:** Filtered 2.26M raw applications down to 1,291,983 concluded loans by removing active `"Current"` and grace-period accounts to eliminate right-censoring noise.
 
 | Split | Vintage | Observations | Default Rate | Strategic Purpose |
 | :--- | :---: | :---: | :---: | :--- |
@@ -114,40 +114,51 @@ The policy engine (`src/policy/decision_engine.py`) optimizes operational thresh
 $$\text{Optimal Cutoffs:} \quad \tau_{\text{low}}^* = 0.25 \quad \big| \quad \tau_{\text{high}}^* = 0.35$$
 
 ### Master Policy Scorecard (Out-of-Time Test Set: 2017–2018, $N = 225,639$)
-| Decision Tier | Threshold Rule | Loan Count | Volume % | Exposure ($) | Realized Default Rate | Expected Loss Saved ($) |
+| Decision Tier | Threshold Rule | Loan Count | Volume % | Exposure ($) | Realized Default Rate | Expected Loss Avoided ($) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Approve-All Baseline** | None | 225,639 | 100.0% | $3,259,579,400 | 21.29% | $0 |
 | **Tier 1: Auto-Approve** | $p < 0.25$ | 138,709 | **61.47%** | $1,775,283,425 | **13.05%** | — |
 | **Tier 2: Manual Review** | $0.25 \le p \le 0.35$ | 40,620 | **18.00%** | $630,641,125 | 27.69% | Preserves $630M loan volume |
 | **Tier 3: Auto-Reject** | $p > 0.35$ | 46,310 | **20.52%** | $853,654,850 | **40.38%** | **$392,166,307 (-47.51%)** |
 
-* **Asymmetric Risk Defense:** Rejecting the top 20.52% riskiest loans eliminates **$392.17M** in Expected Loss and directly averts **$348.54M** in realized charge-offs.
-* **Underwriter Routing:** Channeling 18.00% borderline loans prevents premature rejection, protecting **$630.6M** in viable originations.
+* **Asymmetric Risk Defense:** In out-of-time backtesting, declining the top 20.52% riskiest applications identifies **$348.54M** in historical charge-offs and avoids **$392.17M** in predicted Expected Loss (under conservative $\text{LGD} = 1.0$ and gross committed exposure).
+* **Underwriter Routing:** Channeling 18.00% borderline loans ($630.6M exposure) to manual review preserves viable origination volume at a 27.69% default rate.
+
+> [!NOTE]
+> **Methodological Note on Counterfactual Accounting:** All 225,639 loans in the 2017–2018 test cohort were historically originated by Lending Club. Reported loss metrics represent a counterfactual simulation. Manual review loans ($18.00\%$) are treated as originated in loss accounting, representing the most conservative posture for automated policy evaluation.
 
 ---
 
-## ⚖️ Algorithmic Fairness, Demographic Audit & Regulatory Stance (ADR 9.1)
+## ⚖️ Regulatory Compliance & Sub-Cohort Calibration Audit (ADR 9.1)
 
 Consumer credit in the United States is governed by the **Equal Credit Opportunity Act (ECOA / Regulation B)** and the **Fair Credit Reporting Act (FCRA)**.
 
-### 1. Proxy Variable Elimination
-- **Redlining Prevention:** Dropped 3-digit `zip_code` to prevent indirect geographic bias correlated with racial demographic clustering.
+### 1. Proxy Variable Elimination & Statutory Compliance
+- **Redlining Prevention:** Dropped 3-digit `zip_code` in the feature pipeline to prevent indirect geographic bias correlated with demographic clustering.
 - **Employer Regularization:** Excluded free-text employer names (`emp_title`) with > 500,000 sparse levels to avoid employer-prestige bias.
+- **Statutory Non-Collection:** *Protected demographic attributes (race, gender, sex, age, marital status, religion) are neither collected nor utilized, adhering strictly to federal statutory prohibitions under 12 CFR § 1002.5(b).*
 
-### 2. Subgroup Calibration Audit (Test Partition, $N = 225,639$)
-| Sub-Cohort | Group | Test Volume | Realized Default Rate | Mean Predicted PD | Calibration Spread |
+### 2. Sub-Cohort Calibration Audit (Test Partition, $N = 225,639$)
+Evaluating calibration stability across core underwriting segments on the untouched 2017–2018 test cohort:
+
+| Sub-Cohort | Group | Test Volume (%) | Realized Default Rate | Mean Predicted PD | Calibration Spread |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| **Residential Tenancy** | Mortgage | 114,849 (50.9%) | 18.72% | 18.91% | +0.19% (Calibrated) |
-| | Own | 24,198 (10.7%) | 20.89% | 20.74% | -0.15% (Calibrated) |
-| | Rent | 86,592 (38.4%) | 24.81% | 24.58% | -0.23% (Calibrated) |
-| **Loan Purpose** | Debt Consolidation | 129,481 (57.4%) | 21.08% | 21.15% | +0.07% (Calibrated) |
-| | Credit Card Refi | 50,212 (22.3%) | 17.94% | 18.12% | +0.18% (Calibrated) |
-| | Small Business | 2,410 (1.1%) | 30.58% | 30.12% | -0.46% (Calibrated) |
+| **Residential Tenancy** | Mortgage | 113,335 (50.2%) | 17.38% | 20.92% | +3.55% |
+| | Own | 27,785 (12.3%) | 21.85% | 23.28% | +1.43% |
+| | Rent | 84,296 (37.4%) | 26.38% | 25.88% | -0.50% |
+| **Loan Purpose** | Debt Consolidation | 123,790 (54.9%) | 22.28% | 24.82% | +2.54% |
+| | Credit Card Refi | 43,673 (19.4%) | 18.44% | 21.23% | +2.79% |
+| | Small Business | 2,368 (1.0%) | 36.15% | 26.65% | -9.50% (Under-priced) |
 
-*Spread ($|\text{Realized} - \text{Predicted}|$) remains $< 0.50\%$ across all subgroups, confirming that Platt calibration introduces no demographic distortion.*
+> [!NOTE]
+> The model maintains consistent calibration across core consumer credit segments (spreads $< 3.6\%$), but underestimates default risk in specialized non-consumer categories such as Small Business loans ($-9.50\%$ spread), indicating that commercial credit warrants distinct underwriting sub-models.
 
-### 3. TreeSHAP Adverse Action Notices
-When an applicant is rejected or reviewed, `src/explainability/shap_explainer.py` extracts local Shapley attributions and maps them to human-readable FCRA disclosures:
+### 3. TreeSHAP Local Attributions & Adverse Action Explanations
+When an applicant is rejected or reviewed, `src/explainability/shap_explainer.py` extracts local TreeSHAP attributions and maps the principal risk-increasing features to human-readable disclosures modeled after ECOA/FCRA adverse action requirements:
+
+* **Attribution Scope:** Explains applicant log-odds divergence from the baseline population, surfacing the top 3 factors driving elevated model risk.
+* **API Delivery:** Served in real-time under `adverse_action_reasons` via the `POST /predict` endpoint for all non-approved tiers.
+* **Regulatory Note:** Adverse action templates provide mathematical interpretability of model risk factors; institutional production deployment requires formal legal and compliance sign-off for statutory notice fulfillment.
 
 ```text
 ================================================================================
@@ -209,7 +220,7 @@ sudo docker compose logs -f
 
 | # | Acceptance Criterion | Target Specification | Empirical Outcome & Verification | Status |
 | :-: | :--- | :--- | :--- | :-: |
-| **1** | **Verifiable Headline Claim** | Quantify Expected Loss reduction vs Approve-All | **$392,166,307 (-47.51%) EL saved** at 61.47% approval volume on test set | **PASS** |
+| **1** | **Verifiable Headline Claim** | Quantify Expected Loss reduction vs Approve-All | **$392,166,307 (-47.51%) EL avoided in OOT backtest** at 61.47% auto-approval | **PASS** |
 | **2** | **Beat Linear Regulated Baseline** | Significant Gini improvement vs Logistic Regression | **Gini 0.4229 vs 0.2478** (+17.51 pp / +70.6% relative lift, $p < 0.001$) | **PASS** |
 | **3** | **Beat Proprietary Platform Baseline** | Match or exceed Lending Club credit grade Gini | **Gini 0.4229 vs 0.3642** (+5.87 pp / +16.1% relative lift) | **PASS** |
 | **4** | **Validated Calibration** | Near-diagonal reliability curve & Brier $< 0.16$ | **Brier score 0.1525** (down from 0.2084 raw, -26.8% error) | **PASS** |

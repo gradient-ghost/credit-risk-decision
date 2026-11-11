@@ -277,8 +277,12 @@ class CreditSHAPExplainer:
         seen_descriptions = set()
 
         for idx in sorted_indices:
-            feat_name = self.feature_names[idx]
             val = shap_vec[idx]
+            # Defensive guard: only features that actively increased risk (SHAP > 0)
+            # may serve as adverse action reasons under ECOA/FCRA principles.
+            if val <= 0:
+                break
+            feat_name = self.feature_names[idx]
             desc = get_adverse_action_description(feat_name)
             if desc not in seen_descriptions:
                 seen_descriptions.add(desc)
@@ -286,9 +290,12 @@ class CreditSHAPExplainer:
             if len(top_reasons) >= top_n:
                 break
 
-        # Fallback if fewer than top_n unique reasons were extracted
-        if len(top_reasons) < top_n:
+        # Fallback only if positive risk drivers were found but fewer than top_n unique text descriptions
+        if 0 < len(top_reasons) < top_n:
             for idx in sorted_indices:
+                val = shap_vec[idx]
+                if val <= 0:
+                    break
                 feat_name = self.feature_names[idx]
                 desc = f"Elevated risk score associated with {feat_name.replace('_', ' ').title()}"
                 if desc not in seen_descriptions:
@@ -303,6 +310,7 @@ class CreditSHAPExplainer:
         self,
         applicant_dict: Optional[Dict[str, Any]] = None,
         top_reasons: Optional[List[str]] = None,
+        decision_tier: str = "AUTO_REJECT",
     ) -> str:
         """Format a legally compliant Adverse Action Notice under ECOA and FCRA.
 
@@ -312,6 +320,8 @@ class CreditSHAPExplainer:
             Applicant metadata (id, loan_amnt, etc.).
         top_reasons : list of str, optional
             Top adverse reasons (from explain_applicant).
+        decision_tier : str, default="AUTO_REJECT"
+            Decision tier (AUTO_REJECT or MANUAL_REVIEW).
 
         Returns
         -------
@@ -344,7 +354,7 @@ STATEMENT OF ADVERSE ACTION AND CREDIT EVALUATION NOTICE
 Date of Notice:          {date_str}
 Application Reference:   {app_id}
 Requested Loan Amount:   {loan_amount_str}
-Decision Status:         APPLICATION DECLINED (Tier: AUTO_REJECT)
+Decision Status:         APPLICATION EVALUATION (Tier: {decision_tier})
 ======================================================================
 
 Dear Applicant,
@@ -535,10 +545,13 @@ def explain_applicant(
 def generate_adverse_action_notice(
     applicant_dict: Optional[Dict[str, Any]] = None,
     top_reasons: Optional[List[str]] = None,
+    decision_tier: str = "AUTO_REJECT",
 ) -> str:
     """Format a legally compliant Adverse Action Notice under ECOA and FCRA."""
     explainer = get_default_explainer()
-    return explainer.generate_adverse_action_notice(applicant_dict, top_reasons)
+    return explainer.generate_adverse_action_notice(
+        applicant_dict, top_reasons, decision_tier=decision_tier
+    )
 
 
 def main():
